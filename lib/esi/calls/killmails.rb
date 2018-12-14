@@ -6,15 +6,21 @@ module Esi
     class Killmails < Base
       self.scope = 'esi-killmails.read_killmails.v1'
 
-      def initialize(character_id:, max_count: 50, max_kill_id: nil)
+      def initialize(character_id)
         @path = "/characters/#{character_id}/killmails/recent"
-        @params = { max_count: max_count }
-        @params[:max_kill_id] = max_kill_id if max_kill_id
+      end
+    end
+
+    class CorporationKillmails < Base
+      self.scope = 'esi-killmails.read_corporation_killmails.v1'
+
+      def initialize(corporation_id)
+        @path = "/corporations/#{corporation_id}/killmails/recent"
       end
     end
 
     class Killmail < Base
-      def initialize(id:, hash:)
+      def initialize(id, hash)
         @path = "/killmails/#{id}/#{hash}"
       end
     end

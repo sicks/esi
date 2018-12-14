@@ -110,7 +110,7 @@ module Esi
 
     def cached_response(klass, *args, &block)
       call = klass.new(*args)
-      Esi.cache.fetch(call.cache_key, exceptionxpires_in: klass.cache_duration) do
+      Esi.cache.fetch(call.cache_key, expires_in: klass.cache_duration) do
         make_call(call, &block)
       end
     end
