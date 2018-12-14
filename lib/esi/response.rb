@@ -49,8 +49,12 @@ module Esi
       true
     end
 
-    def method_missing(method, *args, &block)
-      data.send(method, *args, &block)
+    def respond_to_missing?(method_name, include_private = false)
+      data.respond_to?(method_name.to_sym) || super
+    end
+
+    def method_missing(method_name, *args, &block)
+      data.send(method_name, *args, &block) || super
     end
 
     private

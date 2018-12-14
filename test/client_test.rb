@@ -12,6 +12,22 @@ class EsiClientTest < MiniTest::Test
       Thread.current[:esi_client] = nil
     end
 
+    describe 'call methods' do
+      Esi::Calls.constants.map { |c| c.to_s.underscore.to_sym }.each do |call|
+        should "respond_to :#{call.to_s.underscore.to_sym}" do
+          assert @client.respond_to?(call.to_sym)
+        end
+      end
+    end
+
+    context 'with a method that does not exist' do
+      should 'raise NoMethodError' do
+        assert_raises NoMethodError do
+          @client.some_method_that_doesnt_exist
+        end
+      end
+    end
+
     describe '#current=' do
       should 'override predefined client' do
         new_client = Esi::Client.new

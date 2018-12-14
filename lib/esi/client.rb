@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'esi/client/client_context'
+
 module Esi
   # The Esi Client class
   # @!attribute [rw] refresh_callback
@@ -15,6 +17,7 @@ module Esi
   # @!attribute [r] oauth
   #  @return [Esi::Oauth] the oauth instance for the client
   class Client
+    include Esi::ClientContext
     # @return [Fixnum] The max amount of request attempst Client will make
     MAX_ATTEMPTS = 2
 
@@ -33,92 +36,44 @@ module Esi
       @oauth = init_oauth
     end
 
-    # Set the current thread's `Esi::Client`
+    # Intercept Esi::Client respond_to? and return true if
+    #   an Esi::Call exists with the approriate method_name
     #
-    # @param client [Esi::Client] the client to set
-    #
-    # @return [Esi::Client] the current thread's `Esi::Client`
-    def self.current=(client)
-      Thread.current[:esi_client] = client
-    end
-
-    # Get the current thread's `Esi::Client`
-    # @return [Esi::Client] the current thread's `Esi::Client`
-    def self.current
-      Thread.current[:esi_client] ||= new
-    end
-
-    # Switch to default Esi::Client (Esi::Client.new)
-    # @return [Esi::Client] the current thread's `Esi::Client`
-    def self.switch_to_default
-      self.current = new
-    end
-
-    # Switch current thread's client to instance of Esi::Client
-    # @return [self] the instance calling switch to
-    def switch_to
-      Esi::Client.current = self
-    end
-
-    # Yield block with instance of Esi::Client and revert to
-    #  previous client or default client
-    #
-    # @example Call an Esi::Client method using an instance of client
-    #  new_client = Esi::Client.new(token: 'foo', refresh_token: 'foo', exceptionxpires_at: 30.minutes.from_now)
-    #  new_client.with_client do |client|
-    #    client.character(1234)
-    #  end
-    #  #=> Esi::Response<#>
-    #
-    # @yieldreturn [#block] the passed block.
-    def with_client
-      initial_client = Esi::Client.current
-      switch_to
-      yield(self) if block_given?
-    ensure
-      initial_client.switch_to if initial_client
-      Esi::Client.switch_to_default unless initial_client
+    # @param method_name [Symbol|String] method_name the name of the method called
+    # @param include_private [Boolean|nil] includes private methods if true
+    # @return [Boolean] whether the method exists
+    def respond_to_missing?(method_name, include_private = false)
+      call_class(method_name) || super
     end
 
     # Intercept Esi::Client method_missing and attempt to call an Esi::Request
     #  with an Esi::Calls
     #
-    # @param name [Symbol|String] name the name of the method called
-    # @param args [Array] *args the arguments to call the method with
-    # @param block [#block] &block the block to pass to the underlying method
+    # @param metho_name [Symbol|String] the name of the method called
+    # @param args [Array] the arguments to call the method with
+    # @param block [#block] the block to pass to the underlying method
     # @raise [NameError] If the Esi::Calls does not exist
     # @return [Esi::Response] the response given for the call
-    def method_missing(name, *args, &block)
-      klass = nil
-      ActiveSupport::Notifications.instrument('esi.client.detect_call') do
-        class_name = method_to_class_name name
-        begin
-          klass = Esi::Calls.const_get(class_name)
-        rescue NameError
-          super(name, *args, &block)
-        end
-      end
-      cached_response(klass, *args, &block)
+    def method_missing(method_name, *args, &block)
+      detect_call(method_name, *args, &block) || super
     end
 
     # Test if the Esi::Client has a method
-    # @param [Symbol] name the name of the method to test
+    # @deprecated Use #respond_to? instead.
+    # @param [Symbol] method_name the name of the method to test
     # @return [Boolean] wether or not the method exists
     def method?(name)
-      begin
-        klass = Esi::Calls.const_get(method_to_class_name(name))
-      rescue NameError
-        return false
-      end
-      !klass.nil?
+      warn '[DEPRECATION `method?` is deprecated. Please use `respond_to?` instead.'
+      call_exists?(method_name)
     end
 
     # Test if the Esi::Client has a pluralized version of a method
     # @param [Symbol] name the name of the method to test
     # @return [Boolean] wether or not the pluralized method exists
-    def plural_method?(name)
-      plural = name.to_s.pluralize.to_sym
-      method? plural
+    def plural_method?(method_name)
+      warn '[DEPRECATION `plural_method?` is deprecated. Please use `respond_to?` instead.'
+      plural = method_name.to_s.pluralize.to_sym
+      call_exists?(plural)
     end
 
     # Log a message
@@ -137,6 +92,18 @@ module Esi
 
     private
 
+    def call_class(method_name)
+      Esi::Calls.const_get(method_to_class_name(method_name))
+    rescue NameError
+      nil
+    end
+
+    def detect_call(method_name, *args, &block)
+      klass = nil
+      ActiveSupport::Notifications.instrument('esi.client.detect_call') { klass = call_class(method_name) }
+      cached_response(klass, *args, &block) if klass
+    end
+
     def make_call(call, &block)
       call.paginated? ? request_paginated(call, &block) : request(call, &block)
     end
@@ -148,8 +115,8 @@ module Esi
       end
     end
 
-    def method_to_class_name(name)
-      name.dup.to_s.split('_').map(&:capitalize).join
+    def method_to_class_name(method_name)
+      method_name.to_s.split('_').map(&:capitalize).join
     end
 
     def init_oauth

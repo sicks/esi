@@ -79,7 +79,7 @@ module Esi
   DEFAULT_CONFIG = {
     datasource: :tranquility,
     oauth_host: 'https://login.eveonline.com',
-    api_host: 'https://esi.tech.ccp.is',
+    api_host: 'https://esi.evetech.net',
     api_version: :latest,
     log_level: :info,
     log_target: STDOUT,
